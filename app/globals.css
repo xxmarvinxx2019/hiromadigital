@@ -1,26 +1,343 @@
+/* =========================================
+   Tailwind v4 Import
+   ========================================= */
 @import "tailwindcss";
 
+/* =========================================
+   HIROMA DESIGN TOKENS (CSS VARIABLES)
+   ========================================= */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand */
+  --hiroma-navy: #070c2b;
+  --hiroma-blue: #3b82f6;
+  --hiroma-gold: #c9a24d;
+
+  /* Backgrounds */
+  --hiroma-bg: #f8fafc;
+  --hiroma-surface: #ffffff;
+
+  /* Text */
+  --hiroma-text: #0f172a;
+  --hiroma-muted: #475569;
+
+  /* UI */
+  --hiroma-border: #e2e8f0;
+  --hiroma-success: #16a34a;
+  --hiroma-warning: #f59e0b;
+  --hiroma-danger: #dc2626;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* =========================================
+   BASE RESET & TYPOGRAPHY
+   ========================================= */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  html {
+    font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--hiroma-bg);
+    color: var(--hiroma-text);
+    line-height: 1.6;
+  }
+
+  /* Headings */
+  h1 {
+    font-size: clamp(2.5rem, 4vw, 3.25rem);
+    font-weight: 600;
+    color: var(--hiroma-navy);
+    line-height: 1.2;
+  }
+
+  h2 {
+    font-size: clamp(2rem, 3vw, 2.5rem);
+    font-weight: 600;
+    color: var(--hiroma-navy);
+    line-height: 1.25;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--hiroma-navy);
+  }
+
+  h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--hiroma-navy);
+  }
+
+  /* Text */
+  p {
+    font-size: 1rem;
+    color: var(--hiroma-muted);
+    margin: 0;
+  }
+
+  small {
+    font-size: 0.875rem;
+    color: var(--hiroma-muted);
+  }
+
+  a {
+    color: var(--hiroma-blue);
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* =========================================
+   SUBTLE LANDING PAGE ANIMATIONS
+   ========================================= */
+
+/* =========================================
+   SCROLL REVEAL ANIMATIONS
+   ========================================= */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
+
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+}
+
+.reveal-visible {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Stagger delays */
+.reveal-delay-1 { animation-delay: 0.1s; }
+.reveal-delay-2 { animation-delay: 0.2s; }
+.reveal-delay-3 { animation-delay: 0.3s; }
+.reveal-delay-4 { animation-delay: 0.4s; }
+.reveal-delay-5 { animation-delay: 0.5s; }
+
+/* =========================================
+   FLOATING PRODUCT ANIMATION
+   ========================================= */
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* =========================================
+   SUBTLE SVG FLOAT (HERO DECOR)
+   ========================================= */
+
+@keyframes slow-float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.animate-slow-float {
+  animation: slow-float 12s ease-in-out infinite;
+}
+
+/* =========================================
+   LOGIN PAGE ANIMATIONS (DIRECTIONAL)
+   ========================================= */
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-slide-left {
+  animation: slide-in-left 0.8s ease-out forwards;
+}
+
+.animate-slide-right {
+  animation: slide-in-right 0.8s ease-out forwards;
+}
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.25s ease-out forwards;
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out forwards;
+}
+
+.animate-modal-in {
+  animation: modal-in 0.25s ease-out forwards;
+}
+
+/* =========================================
+   COMPONENT PRIMITIVES
+   ========================================= */
+@layer components {
+  
+  /* Card */
+  .hiroma-card {
+    background-color: var(--hiroma-surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--hiroma-border);
+    box-shadow: var(--shadow-sm);
+    padding: 1.5rem;
+  }
+
+  /* Button */
+  .hiroma-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .hiroma-btn-primary {
+    background-color: var(--hiroma-blue);
+    color: white;
+  }
+
+  .hiroma-btn-primary:hover {
+    opacity: 0.9;
+  }
+
+  .hiroma-btn-secondary {
+    background-color: transparent;
+    color: var(--hiroma-text);
+    border: 1px solid var(--hiroma-border);
+  }
+
+  .hiroma-btn-secondary:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+  }
+
+  /* Badge */
+  .hiroma-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  .hiroma-badge-success {
+    background-color: rgba(22, 163, 74, 0.1);
+    color: var(--hiroma-success);
+  }
+
+  .hiroma-badge-warning {
+    background-color: rgba(245, 158, 11, 0.1);
+    color: var(--hiroma-warning);
+  }
+
+  .hiroma-badge-danger {
+    background-color: rgba(220, 38, 38, 0.1);
+    color: var(--hiroma-danger);
+  }
+}
+
+/* =========================================
+   UTILITIES
+   ========================================= */
+@layer utilities {
+  .bg-surface {
+    background-color: var(--hiroma-surface);
+  }
+
+  .text-muted {
+    color: var(--hiroma-muted);
+  }
+
+  .border-default {
+    border-color: var(--hiroma-border);
+  }
+
+  .shadow-soft {
+    box-shadow: var(--shadow-sm);
+  }
+}
+
+/* =========================================
+   DARK MODE (READY, OPTIONAL)
+   ========================================= */
+/*
+.dark {
+  --hiroma-bg: #020617;
+  --hiroma-surface: #020617;
+  --hiroma-text: #f8fafc;
+  --hiroma-muted: #94a3b8;
+  --hiroma-border: #1e293b;
+}
+*/
