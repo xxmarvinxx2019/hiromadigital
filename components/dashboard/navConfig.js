@@ -110,7 +110,7 @@ export const navConfig = [
     roles: ["reseller"],
     items: [
       {
-        label: "Genealogy Tree",
+        label: "Binary Tree",
         href: "/dashboard/network/tree",
         icon: GitBranch,
       },

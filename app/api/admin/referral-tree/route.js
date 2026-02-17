@@ -1,15 +1,36 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 
-/* ================= TREE BUILDER (SAME AS RESELLER) ================= */
+/* ================= PURE LEFT/RIGHT TREE BUILDER ================= */
 
-async function buildTree(uid, depth = 4) {
-  if (!uid || depth === 0) return null;
+async function buildTree(uid, visited = new Set()) {
+  if (!uid) return null;
+  if (visited.has(uid)) return null;
+
+  visited.add(uid);
 
   const snap = await adminDb.collection("users").doc(uid).get();
   if (!snap.exists) return null;
 
   const u = snap.data();
+
+  let leftNode = null;
+  let rightNode = null;
+
+  // Only build if actual child exists
+  if (u.left) {
+    const leftSnap = await adminDb.collection("users").doc(u.left).get();
+    if (leftSnap.exists) {
+      leftNode = await buildTree(u.left, visited);
+    }
+  }
+
+  if (u.right) {
+    const rightSnap = await adminDb.collection("users").doc(u.right).get();
+    if (rightSnap.exists) {
+      rightNode = await buildTree(u.right, visited);
+    }
+  }
 
   return {
     id: uid,
@@ -24,8 +45,8 @@ async function buildTree(uid, depth = 4) {
     totalEarnings:
       (u.referralEarnings || 0) + (u.pairingEarnings || 0),
 
-    left: u.left ? await buildTree(u.left, depth - 1) : null,
-    right: u.right ? await buildTree(u.right, depth - 1) : null,
+    left: leftNode,
+    right: rightNode,
   };
 }
 
@@ -46,24 +67,23 @@ export async function POST(req) {
       return NextResponse.json({ tree: null });
     }
 
-    // Find referral reseller
-    const snap = await adminDb
+    const referralSnap = await adminDb
       .collection("users")
       .where("email", "==", email)
       .where("role", "==", "reseller")
       .limit(1)
       .get();
 
-    if (snap.empty) {
+    if (referralSnap.empty) {
       return NextResponse.json({ tree: null });
     }
 
-    const referralUid = snap.docs[0].id;
+    const referralUid = referralSnap.docs[0].id;
 
-    // 🔥 EXACT SAME TREE AS RESELLER PAGE
-    const tree = await buildTree(referralUid, 4);
+    const tree = await buildTree(referralUid);
 
     return NextResponse.json({ tree });
+
   } catch (err) {
     console.error("REFERRAL TREE ERROR:", err);
     return NextResponse.json(

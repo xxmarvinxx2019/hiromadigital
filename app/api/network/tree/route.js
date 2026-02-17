@@ -1,39 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 
-async function buildTree(uid, depth = 3) {
-  if (!uid || depth === 0) return null;
-
-  const snap = await adminDb.collection("users").doc(uid).get();
-  if (!snap.exists) return null;
-
-  const user = snap.data();
-
-  const referral = user.referralEarnings || 0;
-const pairing = user.pairingEarnings || 0;
-
-return {
-  id: uid,
-  name: `${user.firstName} ${user.lastName}`,
-  username: user.email,
-
-  leftPoints: user.leftPoints || 0,
-  rightPoints: user.rightPoints || 0,
-
-  referralEarnings: referral,
-  pairingEarnings: pairing,
-  totalEarnings: referral + pairing,
-
-  left: user.left
-    ? await buildTree(user.left, depth - 1)
-    : null,
-  right: user.right
-    ? await buildTree(user.right, depth - 1)
-    : null,
-};
-
-}
-
 export async function GET(req) {
   try {
     const authHeader = req.headers.get("authorization");
@@ -45,9 +12,51 @@ export async function GET(req) {
     const token = authHeader.replace("Bearer ", "");
     const decoded = await adminAuth.verifyIdToken(token);
 
-    const tree = await buildTree(decoded.uid, 4);
+    const rootUid = decoded.uid;
+
+    // 🔥 Get ALL resellers (NO distributor filter)
+    const usersSnap = await adminDb
+      .collection("users")
+      .where("role", "==", "reseller")
+      .get();
+
+    const map = {};
+
+    usersSnap.forEach(doc => {
+      const u = doc.data();
+
+      map[doc.id] = {
+        id: doc.id,
+        name: `${u.firstName} ${u.lastName}`,
+        username: u.email,
+        parentId: u.parentId,
+        leg: u.leg,
+        leftPoints: u.leftPoints || 0,
+        rightPoints: u.rightPoints || 0,
+        referralEarnings: u.referralEarnings || 0,
+        pairingEarnings: u.pairingEarnings || 0,
+        totalEarnings:
+          (u.referralEarnings || 0) + (u.pairingEarnings || 0),
+        left: null,
+        right: null,
+      };
+    });
+
+    // 🔥 Link by parentId ONLY
+    Object.values(map).forEach(node => {
+      if (node.parentId && map[node.parentId]) {
+        if (node.leg === "left") {
+          map[node.parentId].left = node;
+        } else if (node.leg === "right") {
+          map[node.parentId].right = node;
+        }
+      }
+    });
+
+    const tree = map[rootUid] || null;
 
     return NextResponse.json({ tree });
+
   } catch (err) {
     console.error("TREE ERROR:", err);
     return NextResponse.json(

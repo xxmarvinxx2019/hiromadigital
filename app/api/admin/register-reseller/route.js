@@ -19,11 +19,48 @@ export async function POST(req) {
       lastName,
       email,
       password,
+      mobile,
+      province,
+      city,
+      barangay,
+      pob,
+      dob,
       referralEmail,
       placement,
     } = body;
 
+    /* ================= BASIC VALIDATION ================= */
+
+    if (!mobile || !province || !city || !barangay || !pob || !dob) {
+      return NextResponse.json(
+        { error: "Missing required personal information" },
+        { status: 400 }
+      );
+    }
+
+    if (!/^09\d{9}$/.test(mobile)) {
+      return NextResponse.json(
+        { error: "Invalid mobile number format" },
+        { status: 400 }
+      );
+    }
+
+    if (!referralEmail) {
+      return NextResponse.json(
+        { error: "Referral is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!placement || !placement.leg) {
+      return NextResponse.json(
+        { error: "Placement is required" },
+        { status: 400 }
+      );
+    }
+
     /* ================= READ PIN ================= */
+
     const pinSnap = await adminDb
       .collection("pins")
       .where("code", "==", pinCode)
@@ -57,13 +94,18 @@ export async function POST(req) {
     const distributorId = pin.assignedTo;
 
     /* ================= CREATE AUTH USER ================= */
-    const userRecord = await adminAuth.createUser({ email, password });
+
+    const userRecord = await adminAuth.createUser({
+      email,
+      password,
+    });
+
     const uid = userRecord.uid;
 
-    /* ================= TRANSACTION LOG BUFFER ================= */
     const transactionLogs = [];
 
     /* ================= FIRESTORE TRANSACTION ================= */
+
     await adminDb.runTransaction(async (tx) => {
       const usersRef = adminDb.collection("users");
       const pinsRef = adminDb.collection("pins").doc(pinDoc.id);
@@ -71,7 +113,6 @@ export async function POST(req) {
 
       /* ================= READ PHASE ================= */
 
-      // Parent
       let parentSnap = null;
       if (placement.leg !== "root") {
         parentSnap = await tx.get(usersRef.doc(placement.parentId));
@@ -81,19 +122,20 @@ export async function POST(req) {
         }
       }
 
-      // Referrer
       let referrerSnap = null;
-      if (referralEmail) {
-        const refQuery = await tx.get(
-          usersRef
-            .where("email", "==", referralEmail)
-            .where("role", "==", "reseller")
-            .limit(1)
-        );
-        if (!refQuery.empty) referrerSnap = refQuery.docs[0];
+      const refQuery = await tx.get(
+        usersRef
+          .where("email", "==", referralEmail)
+          .where("role", "==", "reseller")
+          .limit(1)
+      );
+
+      if (refQuery.empty) {
+        throw new Error("Invalid referral");
       }
 
-      // Uplines
+      referrerSnap = refQuery.docs[0];
+
       const uplines = [];
       let currentParentId = placement.parentId;
       let currentLeg = placement.leg;
@@ -118,28 +160,28 @@ export async function POST(req) {
       const today = new Date().toISOString().slice(0, 10);
 
       /* ---------- REFERRAL BONUS ---------- */
-      if (referrerSnap) {
-        const bonus = packageConfig.referralBonus;
-        const refData = referrerSnap.data();
 
-        updates.push({
-          ref: referrerSnap.ref,
-          data: {
-            referralEarnings: (refData.referralEarnings || 0) + bonus,
-            totalEarnings: (refData.totalEarnings || 0) + bonus,
-          },
-        });
+      const bonus = packageConfig.referralBonus;
+      const refData = referrerSnap.data();
 
-        transactionLogs.push({
-          userId: referrerSnap.id,
-          type: "referral",
-          amount: bonus,
-          points: 0,
-          description: `Referral bonus from ${email}`,
-        });
-      }
+      updates.push({
+        ref: referrerSnap.ref,
+        data: {
+          referralEarnings: (refData.referralEarnings || 0) + bonus,
+          totalEarnings: (refData.totalEarnings || 0) + bonus,
+        },
+      });
+
+      transactionLogs.push({
+        userId: referrerSnap.id,
+        type: "referral",
+        amount: bonus,
+        points: 0,
+        description: `Referral bonus from ${email}`,
+      });
 
       /* ---------- PAIRING WITH DAILY CAP ---------- */
+
       for (const upline of uplines) {
         let leftPoints = upline.data.leftPoints || 0;
         let rightPoints = upline.data.rightPoints || 0;
@@ -170,7 +212,6 @@ export async function POST(req) {
           const paidEarnings = paidPoints * POINT_TO_PESO;
           const overflowEarnings = overflowPoints * POINT_TO_PESO;
 
-          // consume ALL paired points
           leftPoints -= pairPoints;
           rightPoints -= pairPoints;
 
@@ -217,12 +258,10 @@ export async function POST(req) {
 
       /* ================= WRITE PHASE ================= */
 
-      // Slot
       if (parentSnap) {
         tx.update(parentSnap.ref, { [placement.leg]: uid });
       }
 
-      // Create reseller
       tx.set(usersRef.doc(uid), {
         role: "reseller",
         distributorId,
@@ -232,10 +271,18 @@ export async function POST(req) {
         middleName: middleName || "",
         lastName,
         email,
+        mobile,
+
+        province,
+        city,
+        barangay,
+
+        placeOfBirth: pob,
+        dateOfBirth: dob,
 
         parentId: placement.parentId || null,
         leg: placement.leg,
-        referralEmail: referralEmail || null,
+        referralEmail,
 
         leftPoints: 0,
         rightPoints: 0,
@@ -249,12 +296,10 @@ export async function POST(req) {
         createdAt: Timestamp.now(),
       });
 
-      // Apply updates
       for (const u of updates) {
         tx.update(u.ref, u.data);
       }
 
-      // Log transactions
       for (const log of transactionLogs) {
         tx.set(transactionsRef.doc(), {
           ...log,
@@ -262,7 +307,6 @@ export async function POST(req) {
         });
       }
 
-      // Consume PIN
       tx.update(pinsRef, {
         status: "Used",
         usedBy: uid,

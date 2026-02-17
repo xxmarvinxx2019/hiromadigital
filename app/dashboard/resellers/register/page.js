@@ -4,6 +4,9 @@ import { useState, useRef } from "react";
 import PlacementPickerModal from "@/components/PlacementPickerModal";
 import PlacementTree from "@/components/PlacementTree";
 import { auth } from "@/lib/firebase/client";
+import provinces from "@/ph-json/province.json";
+import cities from "@/ph-json/city.json";
+import barangays from "@/ph-json/barangay.json";
 
 const steps = [
   "PIN Verification",
@@ -24,20 +27,26 @@ export default function RegisterResellerPage() {
   const [placement, setPlacement] = useState(null);
 
   const [referralTree, setReferralTree] = useState(null);
+const [filteredCities, setFilteredCities] = useState([]);
+const [filteredBarangays, setFilteredBarangays] = useState([]);
 
   const [form, setForm] = useState({
-    pin: "",
-    firstName: "",
-    middleName: "",
-    lastName: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    address: "",
-    pob: "",
-    dob: "",
-    referral: "",
-  });
+  pin: "",
+  firstName: "",
+  middleName: "",
+  lastName: "",
+  email: "",
+  password: "",
+  confirmPassword: "",
+  mobile: "",
+  province: "",
+  city: "",
+  barangay: "",
+  pob: "",
+  dob: "",
+  referral: "",
+});
+
 
   const [fieldErrors, setFieldErrors] = useState({});
   const formRef = useRef(null);
@@ -60,6 +69,35 @@ export default function RegisterResellerPage() {
     if (/[A-Z]/.test(pw) && /\d/.test(pw)) return "Strong";
     return "Medium";
   }
+  function handleProvinceChange(code) {
+  const cityList = cities.filter(
+    (c) => c.province_code === code
+  );
+
+  setForm({
+    ...form,
+    province: code,
+    city: "",
+    barangay: "",
+  });
+
+  setFilteredCities(cityList);
+  setFilteredBarangays([]);
+}
+
+function handleCityChange(code) {
+  const brgyList = barangays.filter(
+    (b) => b.city_code === code
+  );
+
+  setForm({
+    ...form,
+    city: code,
+    barangay: "",
+  });
+
+  setFilteredBarangays(brgyList);
+}
 
   /* ================= VALIDATION ================= */
 
@@ -88,10 +126,20 @@ export default function RegisterResellerPage() {
         errors.confirmPassword = "Passwords do not match";
       }
 
-      if (!form.address) errors.address = "Address is required";
+      if (!form.mobile) errors.mobile = "Mobile number is required";
+if (!form.province) errors.province = "Province is required";
+if (!form.city) errors.city = "City is required";
+if (!form.barangay) errors.barangay = "Barangay is required";
+
       if (!form.pob) errors.pob = "Place of birth is required";
       if (!form.dob) errors.dob = "Date of birth is required";
     }
+    if (step === 2 && !form.referral) {
+  errors.referral = "Referral email is required";
+}
+if (step === 3 && !placement) {
+  errors.placement = "Placement is required";
+}
 
     setFieldErrors(errors);
 
@@ -134,6 +182,20 @@ next();
       setLoading(false);
     }
   }
+  function getProvinceName(code) {
+  const p = provinces.find((p) => p.province_code === code);
+  return p ? p.province_name : "";
+}
+
+function getCityName(code) {
+  const c = cities.find((c) => c.city_code === code);
+  return c ? c.city_name : "";
+}
+
+function getBarangayName(code) {
+  const b = barangays.find((b) => b.brgy_code === code);
+  return b ? b.brgy_name : "";
+}
 
   /* ================= REFERRAL TREE ================= */
 
@@ -179,7 +241,11 @@ next();
         lastName: form.lastName,
         email: form.email,
         password: form.password,
-        address: form.address,
+        mobile: form.mobile,
+province: form.province,
+city: form.city,
+barangay: form.barangay,
+
         pob: form.pob,
         dob: form.dob,
         referralEmail: form.referral || null,
@@ -321,9 +387,135 @@ next();
               onChange={(v) => setForm({ ...form, confirmPassword: v })}
               error={fieldErrors.confirmPassword} />
 
-            <Input label="Address" value={form.address}
-              onChange={(v) => setForm({ ...form, address: v })}
-              error={fieldErrors.address} />
+            <div className="flex flex-col gap-1">
+  <label className="text-sm">Mobile Number</label>
+  <input
+    type="tel"
+    inputMode="numeric"
+    pattern="[0-9]*"
+    maxLength={11}
+    value={form.mobile}
+    onChange={(e) => {
+      // Remove anything that is not a number
+      const cleaned = e.target.value.replace(/\D/g, "");
+
+      setForm({
+        ...form,
+        mobile: cleaned.slice(0, 11), // limit to 11 digits
+      });
+    }}
+    className={`rounded-md bg-slate-100 px-3 py-2 text-sm ${
+      fieldErrors.mobile ? "border border-red-500" : ""
+    }`}
+    placeholder="09XXXXXXXXX"
+  />
+  {fieldErrors.mobile && (
+    <p className="text-xs text-red-600">{fieldErrors.mobile}</p>
+  )}
+</div>
+
+{/* ===== ADDRESS SECTION ===== */}
+<div className="md:col-span-2 space-y-3">
+
+  <div>
+    <label className="text-sm font-medium text-slate-700">
+      Complete Address
+    </label>
+    <p className="text-xs text-slate-500">
+      Select Province, City and Barangay
+    </p>
+  </div>
+
+  <div className="grid md:grid-cols-3 gap-3">
+
+    {/* PROVINCE */}
+    <div className="flex flex-col gap-1">
+      <label className="text-xs text-slate-600">Province</label>
+      <select
+        value={form.province}
+        onChange={(e) => handleProvinceChange(e.target.value)}
+        className={`rounded-md bg-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+          fieldErrors.province ? "border border-red-500" : ""
+        }`}
+      >
+        <option value="">Select Province</option>
+        {[...provinces]
+  .sort((a, b) =>
+    a.province_name.localeCompare(b.province_name)
+  )
+  .map((p, index) => (
+    <option key={index} value={p.province_code}>
+      {p.province_name}
+    </option>
+  ))}
+
+      </select>
+      {fieldErrors.province && (
+        <p className="text-xs text-red-600">{fieldErrors.province}</p>
+      )}
+    </div>
+
+    {/* CITY */}
+    <div className="flex flex-col gap-1">
+      <label className="text-xs text-slate-600">City / Municipality</label>
+      <select
+        value={form.city}
+        onChange={(e) => handleCityChange(e.target.value)}
+        disabled={!form.province}
+        className={`rounded-md bg-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+          fieldErrors.city ? "border border-red-500" : ""
+        }`}
+      >
+        <option value="">Select City</option>
+       {[...filteredCities]
+  .sort((a, b) =>
+    a.city_name.localeCompare(b.city_name)
+  )
+  .map((c,index) => (
+    <option key={index} value={c.city_code}>
+      {c.city_name}
+    </option>
+  ))}
+
+      </select>
+      {fieldErrors.city && (
+        <p className="text-xs text-red-600">{fieldErrors.city}</p>
+      )}
+    </div>
+
+    {/* BARANGAY */}
+    <div className="flex flex-col gap-1">
+      <label className="text-xs text-slate-600">Barangay</label>
+      <select
+        value={form.barangay}
+        onChange={(e) =>
+          setForm({ ...form, barangay: e.target.value })
+        }
+        disabled={!form.city}
+        className={`rounded-md bg-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+          fieldErrors.barangay ? "border border-red-500" : ""
+        }`}
+      >
+        <option value="">Select Barangay</option>
+        {[...filteredBarangays]
+  .sort((a, b) =>
+    a.brgy_name.localeCompare(b.brgy_name)
+  )
+  .map((b, index) => (
+    <option key={index} value={b.brgy_code}>
+      {b.brgy_name}
+    </option>
+  ))}
+
+      </select>
+      {fieldErrors.barangay && (
+        <p className="text-xs text-red-600">{fieldErrors.barangay}</p>
+      )}
+    </div>
+
+  </div>
+</div>
+
             <Input label="Place of Birth" value={form.pob}
               onChange={(v) => setForm({ ...form, pob: v })}
               error={fieldErrors.pob} />
@@ -337,7 +529,7 @@ next();
         {step === 2 && (
           <>
             <Input
-              label="Referral Email (optional)"
+              label="Referral Email"
               value={form.referral}
               onChange={(v) => {
                 setForm({ ...form, referral: v });
@@ -347,7 +539,7 @@ next();
 
             {referralTree && (
               <div className="border rounded-xl p-4 bg-slate-50">
-                <PlacementTree node={referralTree} currentDistributorId={currentDistributorId}/>
+                <PlacementTree node={referralTree} currentDistributorId={currentDistributorId} mode="preview"/>
               </div>
             )}
           </>
@@ -372,6 +564,7 @@ next();
             <PlacementPickerModal
               open={placementModalOpen}
               tree={referralTree}
+              mode="placement"
               currentDistributorId={currentDistributorId} 
               onClose={() => setPlacementModalOpen(false)}
               onSelect={(data) => {
@@ -407,10 +600,11 @@ next();
         value={form.email}
       />
 
-      <ConfirmItem
-        label="Address"
-        value={form.address}
-      />
+     <ConfirmItem
+  label="Address"
+  value={`${getBarangayName(form.barangay)}, ${getCityName(form.city)}, ${getProvinceName(form.province)}`}
+/>
+
 
       <ConfirmItem
         label="Place of Birth"

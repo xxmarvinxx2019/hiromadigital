@@ -3,7 +3,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 
 /* ================= BUILD TREE (IDENTICAL TO RESELLER) ================= */
 
-async function buildTree(uid, depth = 4) {
+async function buildTree(uid, depth = 10) {
   if (!uid || depth === 0) return null;
 
   const snap = await adminDb.collection("users").doc(uid).get();
@@ -67,7 +67,7 @@ export async function GET(req) {
       return NextResponse.json({ tree: null });
     }
 
-    const tree = await buildTree(rootUid, 4);
+    const tree = await buildTree(rootUid, 10);
     return NextResponse.json({ tree });
 
   } catch (err) {

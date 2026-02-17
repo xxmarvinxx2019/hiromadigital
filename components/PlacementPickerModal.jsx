@@ -8,6 +8,7 @@ export default function PlacementPickerModal({
   tree,
   onSelect,
   currentDistributorId,
+  mode
 }) {
   if (!open) return null;
 
@@ -37,7 +38,7 @@ export default function PlacementPickerModal({
 
         <div className="overflow-x-auto">
           <div className="min-w-[1000px] py-4">
-            <PlacementTree node={tree} onSelect={onSelect} currentDistributorId={currentDistributorId}/>
+            <PlacementTree node={tree} onSelect={onSelect} currentDistributorId={currentDistributorId} mode={mode}/>
           </div>
         </div>
       </div>
