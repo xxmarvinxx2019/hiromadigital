@@ -31,30 +31,42 @@ export async function POST(req) {
 
     /* ================= BASIC VALIDATION ================= */
 
-    if (!mobile || !province || !city || !barangay || !pob || !dob) {
+    if (
+      !mobile ||
+      !province ||
+      !city ||
+      !barangay ||
+      !pob ||
+      !dob ||
+      !referralEmail ||
+      !placement?.leg
+    ) {
       return NextResponse.json(
-        { error: "Missing required personal information" },
+        { error: "Missing required fields" },
         { status: 400 }
       );
     }
 
     if (!/^09\d{9}$/.test(mobile)) {
       return NextResponse.json(
-        { error: "Invalid mobile number format" },
+        { error: "Invalid mobile format" },
         { status: 400 }
       );
     }
 
-    if (!referralEmail) {
-      return NextResponse.json(
-        { error: "Referral is required" },
-        { status: 400 }
-      );
-    }
+    /* ================= 7 ACCOUNT LIMIT CHECK ================= */
 
-    if (!placement || !placement.leg) {
+    const identityQuery = await adminDb
+      .collection("users")
+      .where("firstName", "==", firstName)
+      .where("lastName", "==", lastName)
+      .where("dateOfBirth", "==", dob)
+      .where("placeOfBirth", "==", pob)
+      .get();
+
+    if (identityQuery.size >= 7) {
       return NextResponse.json(
-        { error: "Placement is required" },
+        { error: "Maximum 7 accounts per identity reached" },
         { status: 400 }
       );
     }
@@ -76,7 +88,7 @@ export async function POST(req) {
 
     if (pin.status !== "Assigned") {
       return NextResponse.json(
-        { error: "PIN is not available" },
+        { error: "PIN not available" },
         { status: 400 }
       );
     }
@@ -86,7 +98,7 @@ export async function POST(req) {
 
     if (!packageConfig) {
       return NextResponse.json(
-        { error: "Invalid package on PIN" },
+        { error: "Invalid package" },
         { status: 400 }
       );
     }
@@ -102,27 +114,30 @@ export async function POST(req) {
 
     const uid = userRecord.uid;
 
-    const transactionLogs = [];
-
-    /* ================= FIRESTORE TRANSACTION ================= */
+    /* ================= TRANSACTION ================= */
 
     await adminDb.runTransaction(async (tx) => {
       const usersRef = adminDb.collection("users");
       const pinsRef = adminDb.collection("pins").doc(pinDoc.id);
       const transactionsRef = adminDb.collection("transactions");
+      const hiromaRef = usersRef.doc("HIROMA_ROOT");
 
-      /* ================= READ PHASE ================= */
+      /* ---------- Parent ---------- */
 
       let parentSnap = null;
+
       if (placement.leg !== "root") {
         parentSnap = await tx.get(usersRef.doc(placement.parentId));
-        if (!parentSnap.exists) throw new Error("Parent does not exist");
+
+        if (!parentSnap.exists) throw new Error("Parent not found");
+
         if (parentSnap.data()[placement.leg]) {
           throw new Error("Slot already occupied");
         }
       }
 
-      let referrerSnap = null;
+      /* ---------- Referral ---------- */
+
       const refQuery = await tx.get(
         usersRef
           .where("email", "==", referralEmail)
@@ -130,11 +145,11 @@ export async function POST(req) {
           .limit(1)
       );
 
-      if (refQuery.empty) {
-        throw new Error("Invalid referral");
-      }
+      if (refQuery.empty) throw new Error("Invalid referral");
 
-      referrerSnap = refQuery.docs[0];
+      const referrerSnap = refQuery.docs[0];
+
+      /* ---------- Build Uplines ---------- */
 
       const uplines = [];
       let currentParentId = placement.parentId;
@@ -154,12 +169,11 @@ export async function POST(req) {
         currentParentId = snap.data().parentId;
       }
 
-      /* ================= COMPUTE PHASE ================= */
-
       const updates = [];
+      const transactionLogs = [];
       const today = new Date().toISOString().slice(0, 10);
 
-      /* ---------- REFERRAL BONUS ---------- */
+      /* ================= REFERRAL BONUS (NO CAP) ================= */
 
       const bonus = packageConfig.referralBonus;
       const refData = referrerSnap.data();
@@ -180,7 +194,7 @@ export async function POST(req) {
         description: `Referral bonus from ${email}`,
       });
 
-      /* ---------- PAIRING WITH DAILY CAP ---------- */
+      /* ================= PAIRING WITH DAILY CAP ================= */
 
       for (const upline of uplines) {
         let leftPoints = upline.data.leftPoints || 0;
@@ -215,38 +229,58 @@ export async function POST(req) {
           leftPoints -= pairPoints;
           rightPoints -= pairPoints;
 
+          /* ---- Pay reseller ---- */
+
           if (paidPairs > 0) {
+            updates.push({
+              ref: upline.ref,
+              data: {
+                pairingEarnings:
+                  (upline.data.pairingEarnings || 0) +
+                  paidEarnings,
+                totalEarnings:
+                  (upline.data.totalEarnings || 0) +
+                  paidEarnings,
+                dailyPairingCount: usedToday + paidPairs,
+                dailyPairingDate: today,
+              },
+            });
+
             transactionLogs.push({
               userId: upline.ref.id,
               type: "pairing",
               amount: paidEarnings,
               points: paidPoints,
-              description: "Binary pairing (daily capped)",
+              description: "Binary pairing",
             });
           }
 
+          /* ---- Overflow to HIROMA ---- */
+
           if (overflowPairs > 0) {
+            const hiromaSnap = await tx.get(hiromaRef);
+
+            tx.update(hiromaRef, {
+              pairingEarnings:
+                (hiromaSnap.data()?.pairingEarnings || 0) +
+                overflowEarnings,
+              totalEarnings:
+                (hiromaSnap.data()?.totalEarnings || 0) +
+                overflowEarnings,
+            });
+
             transactionLogs.push({
               userId: "HIROMA",
               type: "pairing_overflow",
               amount: overflowEarnings,
               points: overflowPoints,
-              description: "Pairing overflow (daily cap)",
+              description: "Pairing overflow",
             });
           }
 
           updates.push({
             ref: upline.ref,
-            data: {
-              leftPoints,
-              rightPoints,
-              pairingEarnings:
-                (upline.data.pairingEarnings || 0) + paidEarnings,
-              totalEarnings:
-                (upline.data.totalEarnings || 0) + paidEarnings,
-              dailyPairingCount: usedToday + paidPairs,
-              dailyPairingDate: today,
-            },
+            data: { leftPoints, rightPoints },
           });
         } else {
           updates.push({
@@ -259,7 +293,9 @@ export async function POST(req) {
       /* ================= WRITE PHASE ================= */
 
       if (parentSnap) {
-        tx.update(parentSnap.ref, { [placement.leg]: uid });
+        tx.update(parentSnap.ref, {
+          [placement.leg]: uid,
+        });
       }
 
       tx.set(usersRef.doc(uid), {
@@ -315,6 +351,7 @@ export async function POST(req) {
     });
 
     return NextResponse.json({ success: true });
+
   } catch (err) {
     console.error("REGISTER RESELLER ERROR:", err);
     return NextResponse.json(
